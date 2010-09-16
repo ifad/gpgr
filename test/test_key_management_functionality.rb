@@ -2,13 +2,27 @@ require File.dirname(__FILE__) + '/test_helper.rb'
 
 class TestKeyManagementFunctionality < Test::Unit::TestCase
 
-  
   def test_installed_public_keys
     setup_for_key_tests
     before = Gpgr::Keys.installed_public_keys.nitems
-    Gpgr::Keys.import @john_key
     Gpgr::Keys.import @mark_key
+    Gpgr::Keys.import @john_key
     assert_equal before + 2, Gpgr::Keys.installed_public_keys.nitems
+    teardown_for_key_tests
+  end
+
+  #  This becomes necessary if PGP keys are installed
+  #
+  def test_installed_public_keys_allow_for_no_email_in_keyline
+    setup_for_key_tests
+    assert_equal false, Gpgr::Keys.public_key_installed?('john@example.com')
+
+    flexmock(Gpgr::Keys).should_receive(:public_key_entries).and_return(pgp_global_dir_key_and_email)
+    Gpgr::Keys.import @john_key
+
+    assert_nothing_raised do
+      Gpgr::Keys.installed_public_keys.include?('john@example.com'.upcase)
+    end
     teardown_for_key_tests
   end
   

@@ -159,29 +159,34 @@ module Gpgr
       keys = []
       email_regexp = /\<(.*@.*)\>/
 
-      # Select the output to grep for, which is different depending on the version
-      # of GPG installed. This is tested on 1.4 and 2.1.
-      #
-      if `#{Gpgr.command} --version | grep GnuPG`.include?('1.')
-        grep_for = 'pub'
-      else
-        grep_for = 'uid'
+      public_key_entries.each do |key| 
+        if email_regexp.match(key)
+          keys << $1.upcase
+        end
       end
 
-      `#{Gpgr.command} --list-public-keys --with-colons | grep #{grep_for}`.split("\n").each do |key| 
-        keys << email_regexp.match(key)[1].upcase
-      end
-
-      keys.uniq
+      keys
     end
-    
+
     # Simply checks to see if the e-mail address passed through as an argument has a
     # public key attached to it by checking in installed_public_keys.
     #
     def self.public_key_installed?(email)
       installed_public_keys.include?(email.upcase)
     end
-    
+
+    # Raw list of public keys
+    #
+    def self.public_key_entries
+      # Select the output to grep for, which is different depending on the version
+      # of GPG installed. This is tested on 1.4 and 2.1.
+      #
+      grep_for = `#{Gpgr.command} --version | grep GnuPG`.include?('1.') ? 'pub' : 'uid'
+
+      `#{Gpgr.command} -q --no-verbose --list-public-keys --with-colons | grep #{grep_for}`.split("\n").uniq
+    end
+
   end
 
 end
+
