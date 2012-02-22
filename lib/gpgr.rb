@@ -30,7 +30,7 @@
 #  Changelog
 #  * 21-Feb-2012 deadbea7 <deadbea7 [AT] gmail [DOT] com>
 #  - Forked gpgr
-#  - Pass a stream of data and encrypt -- no need for saving unencrypted files to disk
+#  - Updated to pass a stream of data and encrypt -- no need for saving unencrypted files to disk
 #  - 
 module Gpgr
 
@@ -85,7 +85,7 @@ module Gpgr
       # 
       def initialize(stream)
         @email_addresses = []
-				@clear_text = body
+				@clear_text = stream
       end
       
       # Takes a list of e-mail addresses and then encrypts the file straight away.
