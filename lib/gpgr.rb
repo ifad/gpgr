@@ -27,6 +27,11 @@
 #    #
 #    Gpgr::Encrypt.file('/some_file.txt', :to => '/encrypted.gpg').encrypt_using(Gpgr::Keys.installed_public_keys)
 #
+#  Changelog
+#  * 21-Feb-2012 deadbea7 <deadbea7 [AT] gmail [DOT] com>
+#  - Forked gpgr
+#  - Pass a stream of data and encrypt -- no need for saving unencrypted files to disk
+#  - 
 module Gpgr
 
   # Returns the command to execute to run GPG. It is defualted to /use/bin/env gpg 
@@ -41,20 +46,23 @@ module Gpgr
     '/usr/bin/env gpg'
   end
 
+  def self.echo
+		'/usr/bin/env echo'
+	end
+
   # Encapsulates all the functionality related to encrypting a file. All of the real work
   # is done by the class GpgGileForEncryption.
   #
   module Encrypt
     
-    # Takes the path to the file you want to encrypt; and returns a GpgFileForEncryption
+    # Takes a stream of data you want to encrypt; and returns a GpgForEncryption
     # object for you to modify with the people (e-mail addresses) you want to encrypt this
     # file for. Optionally you can specify where you want the encrypted file to be written,
     # by setting :to => some_path. Will default to wherever the current file is, with the
     # extension 'pgp' appended.
     #
-    def self.file(path, options = {})
-      default_options = { :to => "#{path}.pgp" }.merge(options)
-      GpgFileForEncryption.new(path, default_options[:to])
+    def self.stream(stream)
+      GpgEncryption.new(stream)
     end
   
     # Raised if there is an invalid e-mail address provided to encrypt with
@@ -63,27 +71,21 @@ module Gpgr
 
     # Raised if the input or output files for the GPG Encryption are invalid somehow
     #
-    class InvalidFileException < Exception; end
+    class InvalidStreamException < Exception; end
     
 
-    # Contians the details used to encrypt specified +file+, is what actually does
+    # Contians the details used to encrypt specified stream, is what actually does
     # any encryption.
     # 
-    class GpgFileForEncryption
+    class GpgEncryption
       
-      attr_accessor :email_addresses, :file, :file_output
+      attr_accessor :email_addresses, :clear_text
       
-      # The path to the file which GPG Will be encrypting and the path where
-      # you want the encrypted file to be output.
-      #
-      def initialize(path, output_path)
-        @file = File.expand_path(path)
-        if output_path == path + '.pgp'
-          @file_output = @file + '.pgp'
-        else
-          @file_output = File.expand_path(output_path)
-        end
+      # The body of the stream which GPG Will be encrypting.
+      # 
+      def initialize(stream)
         @email_addresses = []
+				@clear_text = body
       end
       
       # Takes a list of e-mail addresses and then encrypts the file straight away.
@@ -105,12 +107,8 @@ module Gpgr
       def encrypt
         bad_key = @email_addresses.empty?
         
-        if File.exists?(@file)
-          unless File.readable?(@file)
-            raise InvalidFileException.new("File at #{@file} is not readable.") and return
-          end
-        else
-          raise InvalidFileException.new("File at #{@file} does not exist.") and return
+				if @clear_text.nil?
+          raise InvalidStreamException.new("Clear text is not readable.") and return
         end
         
         @email_addresses.each do |add|
@@ -121,8 +119,8 @@ module Gpgr
         if bad_key
           raise InvalidEmailException.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
         else
-          command = Gpgr.command + " -q --no-verbose --yes -a -o #{@file_output} -r " + @email_addresses.join(' -r ') + " -e #{@file}"
-          system(command)
+          command = Gpgr.echo + " \"#{@clear_text}\" | " + Gpgr.command + " -q --no-verbose --yes -a -r " + @email_addresses.join(' -r ') + " -e"
+					%x[#{command}]
         end
       end
       
