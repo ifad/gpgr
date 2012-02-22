@@ -17,7 +17,7 @@
 #    # Synopsis
 #    #
 #    list_of_keys = [ 'foo@example.com', 'bar@example.com' ]
-#    Gpgr::Encrypt.file('/some_file.txt', :to => '/encrypted.gpg').encrypt_using(list_of_keys)
+#    Gpgr::Encrypt.stream("cleat text").encrypt_using(list_of_keys)
 #
 #    # To import all the public keys in a given directory
 #    #
@@ -25,13 +25,13 @@
 #   
 #    #  Will encrypt for every single person you have a public key for
 #    #
-#    Gpgr::Encrypt.file('/some_file.txt', :to => '/encrypted.gpg').encrypt_using(Gpgr::Keys.installed_public_keys)
+#    Gpgr::Encrypt.stream("clear text").encrypt_using(Gpgr::Keys.installed_public_keys)
 #
 #  Changelog
 #  * 21-Feb-2012 deadbea7 <deadbea7 [AT] gmail [DOT] com>
 #  - Forked gpgr
-#  - Pass a stream of data and encrypt -- no need for saving unencrypted files to disk
-#  - 
+#  - Updated to pass a stream of data and encrypt -- no need for saving unencrypted files to disk
+#  - s/Gpgr::Encrypt.file/Gpgr::Encrypt.stream/
 module Gpgr
 
   # Returns the command to execute to run GPG. It is defualted to /use/bin/env gpg 
@@ -47,7 +47,7 @@ module Gpgr
   end
 
   def self.echo
-		'/usr/bin/env echo'
+    '/usr/bin/env echo'
 	end
 
   # Encapsulates all the functionality related to encrypting a file. All of the real work
@@ -85,7 +85,7 @@ module Gpgr
       # 
       def initialize(stream)
         @email_addresses = []
-				@clear_text = body
+				@clear_text = stream
       end
       
       # Takes a list of e-mail addresses and then encrypts the file straight away.
