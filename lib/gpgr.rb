@@ -48,7 +48,7 @@ module Gpgr
 
   def self.echo
     '/usr/bin/env echo'
-	end
+  end
 
   # Encapsulates all the functionality related to encrypting a file. All of the real work
   # is done by the class GpgGileForEncryption.
@@ -85,7 +85,7 @@ module Gpgr
       # 
       def initialize(stream)
         @email_addresses = []
-				@clear_text = stream
+        @clear_text = stream
       end
       
       # Takes a list of e-mail addresses and then encrypts the file straight away.
@@ -107,7 +107,7 @@ module Gpgr
       def encrypt
         bad_key = @email_addresses.empty?
         
-				if @clear_text.nil?
+        if @clear_text.nil?
           raise InvalidStreamException.new("Clear text is not readable.") and return
         end
         
@@ -120,7 +120,7 @@ module Gpgr
           raise InvalidEmailException.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
         else
           command = Gpgr.echo + " \"#{@clear_text}\" | " + Gpgr.command + " -q --no-verbose --yes -a -r " + @email_addresses.join(' -r ') + " -e"
-					%x[#{command}]
+          %x[#{command}]
         end
       end
       
