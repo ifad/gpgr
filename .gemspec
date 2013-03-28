@@ -16,14 +16,16 @@ spec = Gem::Specification.new do |spec|
   spec.email = "  ryan@ryanstenhouse.eu"
   spec.rubyforge_project = "gpgr"
   spec.homepage = "http://ryanstenhouse.eu"
-  spec.description = <<END_DESC
-  gpgr is a very light interface to the command-line GPG (GNU 
-  Privacy Guard) tool which is soley concerned with making it
-  as easy as possible to encrypt files with one (or more) public
-  keys.
+  spec.description = <<-DESC
+    gpgr is a very light interface to the command-line GPG (GNU
+    Privacy Guard) tool which is soley concerned with making it
+    as easy as possible to encrypt files with one (or more) public
+    keys.
 
-  It does not provide any major key management tools and does not
-  support decryption.   
+    It does not provide any major key management tools and does not
+    support decryption.
 
-	some updates by ben vandgrift, ben@vandgrift.com
-END_DESC
+    some updates by ben vandgrift, ben@vandgrift.com
+    merging by vjt@openssl.it
+  DESC
+end
