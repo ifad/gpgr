@@ -46,6 +46,16 @@ module Gpgr
     '/usr/bin/env gpg'
   end
 
+  def self.run(options, data)
+    options = [options].flatten.join(' ')
+
+    IO.popen [command, options].join(' '), :mode => 'r+' do |pgp|
+      pgp.write data
+      pgp.close_write
+      pgp.read
+    end
+  end
+
   # Encapsulates all the functionality related to encrypting a file. All of the real work
   # is done by the class GpgGileForEncryption.
   #
@@ -65,36 +75,19 @@ module Gpgr
     #
     class InvalidEmailException < Exception; end
 
-    # Raised if the input or output files for the GPG Encryption are invalid somehow
-    #
-    class InvalidStreamException < Exception; end
-    
-
     # Contians the details used to encrypt specified stream, is what actually does
     # any encryption.
     # 
     class GpgEncryption
-      
-      attr_accessor :email_addresses, :clear_text
-      
-      # The body of the stream which GPG Will be encrypting.
-      # 
+
       def initialize(data)
-        @email_addresses = []
         @clear_text = data
-      end
-      
-      # Takes a list of e-mail addresses and then encrypts the file straight away.
-      #
-      def encrypt_using(email_addresses)
-        using(email_addresses)
-        encrypt
       end
       
       # Expects an array of e-mail addresses for people who this file file should be  
       # decryptable by. 
       #
-      def using(email_addresses)
+      def for(email_addresses)
         @email_addresses = Set.new([email_addresses].flatten.map(&:upcase))
         self
       end
@@ -108,16 +101,12 @@ module Gpgr
           raise InvalidEmailException.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
         end
 
-        command = [Gpgr.command, "--quiet --no-verbose --yes",
+        encrypt = ["--quiet --no-verbose --yes",
           keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}.join(' '),
           "--encrypt"
-        ].join(' ')
+        ]
 
-        IO.popen command, :mode => 'r+' do |pgp|
-          pgp.write @clear_text
-          pgp.close_write
-          pgp.read
-        end
+        Gpgr.run encrypt, @clear_text
       end
       
     end
@@ -142,11 +131,7 @@ module Gpgr
       if existing = installed.find {|k| k.mail == new_key.mail}
         existing
       else
-        IO.popen "gpg --import --quiet --yes --no-verbose", :mode => 'r+' do |pgp|
-          pgp.write key_material
-          pgp.close_write
-          pgp.read
-        end
+        Gpgr.run '--import --quiet --yes --no-verbose', key_material
 
         # Return the new key
         (self.installed_public_keys - installed).first
@@ -200,18 +185,8 @@ module Gpgr
       uid.eql?(other.uid)
     end
 
-    def self.open(file)
-      new `#{Gpgr.command} --with-colons #{file}`
-    end
-
     def self.parse(stream)
-      key = IO.popen "gpg --with-colons", :mode => 'r+' do |pgp|
-        pgp.write stream
-        pgp.close_write
-        pgp.read
-      end
-
-      new key
+      new Gpgr.run("--with-colons", stream)
     end
   end
 
