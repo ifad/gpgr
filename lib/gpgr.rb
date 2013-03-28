@@ -183,7 +183,7 @@ module Gpgr
       #
       grep_for = `#{Gpgr.command} --version | grep GnuPG`.include?('1.') ? 'pub' : 'uid'
 
-      `#{Gpgr.command} -q --no-verbose --list-public-keys --with-colons | grep #{grep_for}`.split("\n").uniq
+      `#{Gpgr.command} -q --no-verbose --list-public-keys --with-colons | grep #{grep_for}`.force_encoding('utf-8').split("\n").uniq
     end
 
   end
