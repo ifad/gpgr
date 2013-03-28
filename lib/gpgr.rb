@@ -130,25 +130,24 @@ module Gpgr
     #
     # FIXME: RACE CONDITION HERE
     #
-    def self.import(path_to_key)
+    def self.import(key_material)
       installed = self.installed_public_keys
+      new_key = Key.parse(key_material)
 
-      `#{Gpgr.command} -q --no-verbose --yes --import #{File.expand_path(path_to_key)}`
+      if existing = installed.find {|k| k.mail == new_key.mail}
+        existing
+      else
+        IO.popen "gpg --import --quiet --yes --no-verbose", :mode => 'r+' do |pgp|
+          pgp.write key_material
+          pgp.close_write
+          pgp.read
+        end
 
-      # Return the new key
-      (self.installed_public_keys - installed).first
-    end
-
-    # Iterates through all of the files at a specified path and attempts to import
-    # those which are likely to be GPG / PGP Public Keys.
-    # 
-    def self.import_keys_at(path)
-      Dir.new(path).each do |file|
-        next if ['..','.'].include?(file)
-        import(File.join(path, file))
+        # Return the new key
+        (self.installed_public_keys - installed).first
       end
     end
-    
+
     # Simply checks to see if the e-mail address passed through as an argument has a
     # public key attached to it by checking in installed_public_keys.
     #
@@ -194,6 +193,20 @@ module Gpgr
 
     def eql?(other)
       uid.eql?(other.uid)
+    end
+
+    def self.open(file)
+      new `#{Gpgr.command} --with-colons #{file}`
+    end
+
+    def self.parse(stream)
+      key = IO.popen "gpg --with-colons", :mode => 'r+' do |pgp|
+        pgp.write stream
+        pgp.close_write
+        pgp.read
+      end
+
+      new key
     end
   end
 
