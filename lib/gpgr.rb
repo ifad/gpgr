@@ -57,8 +57,8 @@ module Gpgr
     # by setting :to => some_path. Will default to wherever the current file is, with the
     # extension 'pgp' appended.
     #
-    def self.file(file)
-      GpgEncryption.new(file)
+    def self.stream(data)
+      GpgEncryption.new(data)
     end
   
     # Raised if there is an invalid e-mail address provided to encrypt with
@@ -79,9 +79,9 @@ module Gpgr
       
       # The body of the stream which GPG Will be encrypting.
       # 
-      def initialize(file)
+      def initialize(data)
         @email_addresses = []
-        @clear_text = file
+        @clear_text = data
       end
       
       # Takes a list of e-mail addresses and then encrypts the file straight away.
@@ -108,11 +108,16 @@ module Gpgr
           raise InvalidEmailException.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
         end
 
-        system [
-          Gpgr.command, "--quiet --no-verbose --yes",
+        command = [Gpgr.command, "--quiet --no-verbose --yes",
           keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}.join(' '),
-          "--encrypt", @clear_text
+          "--encrypt"
         ].join(' ')
+
+        IO.popen command, :mode => 'r+' do |pgp|
+          pgp.write @clear_text
+          pgp.close_write
+          pgp.read
+        end
       end
       
     end
