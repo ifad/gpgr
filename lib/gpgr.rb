@@ -46,10 +46,6 @@ module Gpgr
     '/usr/bin/env gpg'
   end
 
-  def self.echo
-    '/usr/bin/env echo'
-  end
-
   # Encapsulates all the functionality related to encrypting a file. All of the real work
   # is done by the class GpgGileForEncryption.
   #
@@ -61,8 +57,8 @@ module Gpgr
     # by setting :to => some_path. Will default to wherever the current file is, with the
     # extension 'pgp' appended.
     #
-    def self.stream(stream)
-      GpgEncryption.new(stream)
+    def self.file(file)
+      GpgEncryption.new(file)
     end
   
     # Raised if there is an invalid e-mail address provided to encrypt with
@@ -83,9 +79,9 @@ module Gpgr
       
       # The body of the stream which GPG Will be encrypting.
       # 
-      def initialize(stream)
+      def initialize(file)
         @email_addresses = []
-        @clear_text = stream
+        @clear_text = file
       end
       
       # Takes a list of e-mail addresses and then encrypts the file straight away.
@@ -99,33 +95,27 @@ module Gpgr
       # decryptable by. 
       #
       def using(email_addresses)
-        @email_addresses = email_addresses
+        @email_addresses = Set.new([email_addresses].flatten.map(&:upcase))
+        self
       end
       
       # Encrypts the current file for the list of recipients specific (if they are valid)
       #   
       def encrypt
-        bad_key = @email_addresses.empty?
-        
-        if @clear_text.nil?
-          raise InvalidStreamException.new("Clear text is not readable.") and return
-        end
-        
-        @email_addresses.each do |add|
-          unless Gpgr::Keys.public_key_installed?(add)
-            bad_key = true
-          end
-        end
-        if bad_key
+        keys = Gpgr::Keys.installed_public_keys.select {|key| @email_addresses.include?(key.mail)}
+
+        unless keys.size == @email_addresses.size
           raise InvalidEmailException.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
-        else
-          command = Gpgr.echo + " \"#{@clear_text}\" | " + Gpgr.command + " -q --no-verbose --yes -a -r " + @email_addresses.join(' -r ') + " -e"
-          %x[#{command}]
         end
+
+        system [
+          Gpgr.command, "--quiet --no-verbose --yes",
+          keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}.join(' '),
+          "--encrypt", @clear_text
+        ].join(' ')
       end
       
     end
-
   end
 
   # Encapsulates all the functionality for dealing with GPG Keys. There isn't much here since
@@ -138,8 +128,15 @@ module Gpgr
     # really running gpg --import ./path/to/key.asc, the key will be imported
     # and added to the keyring for the user executing this command.
     #
+    # FIXME: RACE CONDITION HERE
+    #
     def self.import(path_to_key)
-      system "#{Gpgr.command} -q --no-verbose --yes --import #{File.expand_path(path_to_key)}"
+      installed = self.installed_public_keys
+
+      `#{Gpgr.command} -q --no-verbose --yes --import #{File.expand_path(path_to_key)}`
+
+      # Return the new key
+      (self.installed_public_keys - installed).first
     end
 
     # Iterates through all of the files at a specified path and attempts to import
@@ -148,44 +145,56 @@ module Gpgr
     def self.import_keys_at(path)
       Dir.new(path).each do |file|
         next if ['..','.'].include?(file)
-        Gpgr::Keys.import(path + '/' + file)
+        import(File.join(path, file))
       end
     end
     
-    # Returns an array with the e-mail addresses of every installed public key
-    # for looping through and detecting if a particular key is installed.
-    #
-    def self.installed_public_keys
-      keys = []
-      email_regexp = /\<(.*@.*)\>/
-
-      public_key_entries.each do |key| 
-        if email_regexp.match(key)
-          keys << $1.upcase
-        end
-      end
-
-      keys
-    end
-
     # Simply checks to see if the e-mail address passed through as an argument has a
     # public key attached to it by checking in installed_public_keys.
     #
     def self.public_key_installed?(email)
-      installed_public_keys.include?(email.upcase)
+      email = email.upcase
+      !!installed_public_keys.find {|k| k.email == email}
     end
 
     # Raw list of public keys
     #
-    def self.public_key_entries
+    def self.installed_public_keys
       # Select the output to grep for, which is different depending on the version
       # of GPG installed. This is tested on 1.4 and 2.1.
       #
       grep_for = `#{Gpgr.command} --version | grep GnuPG`.include?('1.') ? 'pub' : 'uid'
 
-      `#{Gpgr.command} -q --no-verbose --list-public-keys --with-colons | grep #{grep_for}`.force_encoding('utf-8').split("\n").uniq
+      `#{Gpgr.command} -q --no-verbose --list-public-keys --with-colons`.
+        force_encoding('utf-8').split("\n").grep(/^#{grep_for}.+\<?.+@.+\>?/).
+        map {|row| Key.new(row)}
+    end
+  end
+
+  class Key
+    include Comparable
+
+    def initialize(row)
+      key = row.split(':')
+      @uid = key[4]
+      @mail = key[9].scan(/\.*\<?(.+@.+)\>?/).first.first.upcase
     end
 
+    attr_reader :uid
+    attr_reader :mail
+    alias :email :mail
+
+    def <=>(another)
+      mail <=> another.mail
+    end
+
+    def hash
+      uid.hash
+    end
+
+    def eql?(other)
+      uid.eql?(other.uid)
+    end
   end
 
 end
