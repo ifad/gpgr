@@ -196,15 +196,23 @@ module Gpgr
     include Comparable
 
     def initialize(row)
-      key = row.split(':')
-      @mail = key[9].downcase
-      @mail = $1 if @mail =~ /.+<(.+@.+)>/
+      if row =~ /:/
 
-      @uid = if Gpgr.version < 2.0
-        key[4]
+        key = row.split(':')
+        @mail = key[9].downcase
+        @mail = $1 if @mail =~ /.+<(.+@.+)>/
+
+        @uid = if Gpgr.version < 2.0
+          key[4]
+        else
+          `#{Gpgr.command} --list-public-keys --with-colons "#@mail"`.
+            force_encoding('utf-8').split("\n").grep(/^pub/).first.split(':')[4] rescue nil
+        end
       else
-        `#{Gpgr.command} --list-public-keys --with-colons "#@mail"`.
-          force_encoding('utf-8').split("\n").grep(/^pub/).first.split(':')[4]
+
+        key = row.split(/\s+/)
+        @mail = key[3]
+        @uid  = key[1].sub(/^.+\//, '')
       end
     end
 
@@ -225,7 +233,12 @@ module Gpgr
     end
 
     def self.parse(stream)
-      row = Gpgr.run("--with-colons", stream)
+      row = if Gpgr.version < 2.0
+        Gpgr.run("--with-colons", stream)
+      else
+        Gpgr.run("--keyid-format long", stream)
+      end
+
       raise InvalidKeyError, 'Invalid key' if row.size.zero?
       new(row)
     end
