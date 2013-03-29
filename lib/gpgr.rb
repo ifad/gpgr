@@ -211,6 +211,7 @@ module Gpgr
       else
 
         @uid, @mail = row.scan(/pub\s+ \w+\/(\w+) .+ <?(.+@[^>]+)/).first
+        @mail.chomp!
       end
     end
 
