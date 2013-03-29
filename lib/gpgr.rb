@@ -210,9 +210,7 @@ module Gpgr
         end
       else
 
-        key = row.split(/\s+/)
-        @mail = key[3]
-        @uid  = key[1].sub(/^.+\//, '')
+        @uid, @mail = row.scan(/pub\s+ \w+\/(\w+) .+ <?(.+@[^>]+)/).first
       end
     end
 
