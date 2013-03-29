@@ -91,6 +91,9 @@ module Gpgr
     output.read
   end
 
+  class InvalidEmailError < StandardError; end
+  class InvalidKeyError < StandardError; end
+
   # Encapsulates all the functionality related to encrypting a file. All of the real work
   # is done by the class GpgGileForEncryption.
   #
@@ -105,10 +108,6 @@ module Gpgr
     def self.stream(data)
       GpgEncryption.new(data)
     end
-  
-    # Raised if there is an invalid e-mail address provided to encrypt with
-    #
-    class InvalidEmailException < Exception; end
 
     # Contians the details used to encrypt specified stream, is what actually does
     # any encryption.
@@ -123,7 +122,7 @@ module Gpgr
       # decryptable by. 
       #
       def for(email_addresses)
-        @email_addresses = Set.new([email_addresses].flatten.map(&:upcase))
+        @email_addresses = Set.new([email_addresses].flatten.map(&:downcase))
         self
       end
       
@@ -133,7 +132,7 @@ module Gpgr
         keys = Gpgr::Keys.installed_public_keys.select {|key| @email_addresses.include?(key.mail)}
 
         unless keys.size == @email_addresses.size
-          raise InvalidEmailException.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
+          raise InvalidEmailError.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
         end
 
         encrypt = keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}.push("--yes --encrypt")
@@ -174,7 +173,7 @@ module Gpgr
     # public key attached to it by checking in installed_public_keys.
     #
     def self.public_key_installed?(email)
-      email = email.upcase
+      email = email.downcase
       !!installed_public_keys.find {|k| k.email == email}
     end
 
@@ -198,7 +197,9 @@ module Gpgr
     def initialize(row)
       key = row.split(':')
       @uid = key[4]
-      @mail = key[9].scan(/\.*\<?(.+@.+)\>?/).first.first.upcase
+
+      @mail = key[9].downcase
+      @mail = $1 if @mail =~ /.+<(.+@.+)>/
     end
 
     attr_reader :uid
@@ -218,7 +219,9 @@ module Gpgr
     end
 
     def self.parse(stream)
-      new Gpgr.run("--with-colons", stream)
+      row = Gpgr.run("--with-colons", stream)
+      raise InvalidKeyError, 'Invalid key' if row.size.zero?
+      new(row)
     end
   end
 
