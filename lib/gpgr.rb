@@ -46,6 +46,10 @@ module Gpgr
     '/usr/bin/env gpg'
   end
 
+  def self.version
+    @version ||= `#{command} --version`.split("\n").grep(/GnuPG/).first.match(/(\d+\.\d+\.\d+)/) { $1 }.to_f
+  end
+
   # Poor man's IO Loop.
   def self.run(options, data)
     options = [options].flatten.join(' ')
@@ -180,13 +184,10 @@ module Gpgr
     # Raw list of public keys
     #
     def self.installed_public_keys
-      # Select the output to grep for, which is different depending on the version
-      # of GPG installed. This is tested on 1.4 and 2.1.
-      #
-      grep_for = `#{Gpgr.command} --version | grep GnuPG`.include?('1.') ? 'pub' : 'uid'
+      pubkey_prefix = Gpgr.version >= 2.0 ? 'uid' : 'pub'
 
       `#{Gpgr.command} -q --no-verbose --list-public-keys --with-colons`.
-        force_encoding('utf-8').split("\n").grep(/^#{grep_for}.+\<?.+@.+\>?/).
+        force_encoding('utf-8').split("\n").grep(/^#{pubkey_prefix}.+\<?.+@.+\>?/).
         map {|row| Key.new(row)}
     end
   end
@@ -196,10 +197,15 @@ module Gpgr
 
     def initialize(row)
       key = row.split(':')
-      @uid = key[4]
-
       @mail = key[9].downcase
       @mail = $1 if @mail =~ /.+<(.+@.+)>/
+
+      @uid = if Gpgr.version < 2.0
+        key[4]
+      else
+        `#{Gpgr.command} --list-public-keys --with-colons "#@mail"`.
+          force_encoding('utf-8').split("\n").grep(/^pub/).first.split(':')[4]
+      end
     end
 
     attr_reader :uid
