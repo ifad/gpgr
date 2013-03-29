@@ -46,14 +46,49 @@ module Gpgr
     '/usr/bin/env gpg'
   end
 
+  # Poor man's IO Loop.
   def self.run(options, data)
     options = [options].flatten.join(' ')
 
+    input  = StringIO.new(data)
+    output = StringIO.new('')
+
+    closed_write = false
+    chunk = 65535
     IO.popen [command, options].join(' '), :mode => 'r+' do |pgp|
-      pgp.write data
-      pgp.close_write
-      pgp.read
+      loop do
+
+        r, w = IO.select([pgp], [pgp], [], 2)
+
+        begin
+          if w[0]
+            read    = input.read(chunk)
+            written = pgp.write_nonblock(read)
+
+            if written < read.size
+              input.seek(written - read.size, IO::SEEK_CUR)
+            end
+          end
+
+          if r[0]
+            i = output.write pgp.read_nonblock(chunk)
+          end
+
+          if input.eof?
+            if !closed_write
+              pgp.close_write
+              closed_write = true
+            end
+          end
+
+        rescue EOFError
+          break
+        end
+      end
     end
+
+    output.rewind
+    output.read
   end
 
   # Encapsulates all the functionality related to encrypting a file. All of the real work
@@ -101,10 +136,7 @@ module Gpgr
           raise InvalidEmailException.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
         end
 
-        encrypt = ["--quiet --no-verbose --yes",
-          keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}.join(' '),
-          "--encrypt"
-        ]
+        encrypt = keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}.push("--yes --encrypt")
 
         Gpgr.run encrypt, @clear_text
       end
