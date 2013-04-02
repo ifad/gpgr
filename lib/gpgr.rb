@@ -216,7 +216,7 @@ module Gpgr
             force_encoding('utf-8')
 
           # Group pub:: and uid:: stanzas
-          return output.scan(/pub.+?(?=pub|\Z)/m).map {|k| Key.new(k)}
+          return output.scan(/pub:[oqmfu-].+?(?=pub|\Z)/m).map {|k| Key.new(k)}
         end
 
     end
