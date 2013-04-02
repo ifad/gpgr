@@ -51,10 +51,10 @@ module Gpgr
   end
 
   # Poor man's IO Loop.
-  def self.run(options, data)
+  def self.run(options, input = nil)
     options = [options].flatten.join(' ')
 
-    input  = StringIO.new(data)
+    input  = StringIO.new(input.to_s)
     output = StringIO.new('')
 
     closed_write = false
@@ -62,7 +62,9 @@ module Gpgr
     IO.popen [command, options].join(' '), :mode => 'r+' do |pgp|
       loop do
 
-        r, w = IO.select([pgp], [pgp], [], 2)
+        r = [pgp]
+        w = input.eof? ? [] : [pgp] # Select for write only if we have still data to send
+        r, w = IO.select(r, w, [], 10)
 
         begin
           if w[0]
@@ -75,7 +77,7 @@ module Gpgr
           end
 
           if r[0]
-            i = output.write pgp.read_nonblock(chunk)
+            output.write pgp.read_nonblock(chunk)
           end
 
           if input.eof?
@@ -88,6 +90,7 @@ module Gpgr
         rescue EOFError
           break
         end
+
       end
     end
 
