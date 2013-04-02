@@ -1,37 +1,42 @@
-#  Gpgr by Ryan Stenhouse <ryan@ryanstenhouse.eu>, March 2010
-#  on behalf of Purchasing Card Consultancy Limited.
+# Gpgr by Ryan Stenhouse <ryan@ryanstenhouse.eu>, March 2010
+# on behalf of Purchasing Card Consultancy Limited.
 #
-#  gpgr is a very light interface to the command-line GPG (GNU
-#  Privacy Guard) tool which is soley concerned with making it
-#  as easy as possible to encrypt files with one (or more) public
-#  keys.
+# Rewrite by Marcello Barnaba <vjt@openssl.it>
 #
-#  It does not provide any major key management tools and does not
-#  support decryption.
+# gpgr is a very light interface to the command-line GPG (GNU
+# Privacy Guard) tool which is soley concerned with making it
+# as easy as possible to encrypt files with one (or more) public
+# keys.
 #
-#  Usage:
+# Usage:
 #
-#    require 'rubygems'
-#    require 'gpgr'
+#   require 'gpgr'
 #
-#    # Synopsis
-#    #
-#    list_of_keys = [ 'foo@example.com', 'bar@example.com' ]
-#    Gpgr::Encrypt.stream("cleat text").encrypt_using(list_of_keys)
+#   # Encrypt
+#   #
+#   recipients = %w( foo@example.com bar@example.com )
+#   Gpgr.encrypt("clear text").for(recipients).result
 #
-#    # To import all the public keys in a given directory
-#    #
-#    Gpgr::Keys.import_keys_at('/path/to/public/keys')
+#   # Import public key
+#   #
+#   Gpgr::Key.import(File.read('/path/to/pubkey'))
 #
-#    #  Will encrypt for every single person you have a public key for
-#    #
-#    Gpgr::Encrypt.stream("clear text").encrypt_using(Gpgr::Keys.installed_public_keys)
+#   # List available public keys
+#   #
+#   Gpgr::Key.all
 #
-#  Changelog
-#  * 21-Feb-2012 deadbea7 <deadbea7 [AT] gmail [DOT] com>
-#  - Forked gpgr
-#  - Updated to pass a stream of data and encrypt -- no need for saving unencrypted files to disk
-#  - s/Gpgr::Encrypt.file/Gpgr::Encrypt.stream/
+#   # Find public key for given recipient
+#   #
+#   Gpgr::Key.find('foo@example.com')
+#
+#   # Encrypt for every single person you have a public key for
+#   #
+#   Gpgr.encrypt("clear text").for(Gpgr::Keys.all)
+#
+#   # Decrypt
+#   #
+#   Gpgr.decrypt("ciphered data")
+#
 module Gpgr
 
   # Returns the command to execute to run GPG. It is defualted to /use/bin/env gpg 
@@ -105,8 +110,11 @@ module Gpgr
     Encrypt.new(data)
   end
 
-  # Encapsulates all the functionality related to encrypting a file. All of the real work
-  # is done by the class GpgGileForEncryption.
+  def self.decrypt(data)
+    Decrypt.new(data)
+  end
+
+  # Encapsulates all the functionality related to encrypting data.
   #
   class Encrypt
     def initialize(data)
@@ -135,6 +143,16 @@ module Gpgr
       recipients = @keys.map {|key| "--recipient #{key.mail}"}
 
       Gpgr.run recipients.push("--yes --encrypt"), @data
+    end
+  end
+
+  class Decrypt
+    def initialize(data)
+      @data = data
+    end
+
+    def result
+      Gpgr.run '--batch --decrypt', @data
     end
   end
 
