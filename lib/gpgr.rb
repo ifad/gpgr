@@ -1,16 +1,16 @@
 #  Gpgr by Ryan Stenhouse <ryan@ryanstenhouse.eu>, March 2010
 #  on behalf of Purchasing Card Consultancy Limited.
 #
-#  gpgr is a very light interface to the command-line GPG (GNU 
+#  gpgr is a very light interface to the command-line GPG (GNU
 #  Privacy Guard) tool which is soley concerned with making it
 #  as easy as possible to encrypt files with one (or more) public
 #  keys.
 #
 #  It does not provide any major key management tools and does not
-#  support decryption.   
+#  support decryption.
 #
 #  Usage:
-#    
+#
 #    require 'rubygems'
 #    require 'gpgr'
 #
@@ -22,7 +22,7 @@
 #    # To import all the public keys in a given directory
 #    #
 #    Gpgr::Keys.import_keys_at('/path/to/public/keys')
-#   
+#
 #    #  Will encrypt for every single person you have a public key for
 #    #
 #    Gpgr::Encrypt.stream("clear text").encrypt_using(Gpgr::Keys.installed_public_keys)
@@ -101,54 +101,40 @@ module Gpgr
   class InvalidEmailError < StandardError; end
   class InvalidKeyError < StandardError; end
 
+  def self.encrypt(data)
+    Encrypt.new(data)
+  end
+
   # Encapsulates all the functionality related to encrypting a file. All of the real work
   # is done by the class GpgGileForEncryption.
   #
-  module Encrypt
-    
-    # Takes a stream of data you want to encrypt; and returns a GpgForEncryption
-    # object for you to modify with the people (e-mail addresses) you want to encrypt this
-    # file for. Optionally you can specify where you want the encrypted file to be written,
-    # by setting :to => some_path. Will default to wherever the current file is, with the
-    # extension 'pgp' appended.
-    #
-    def self.stream(data)
-      GpgEncryption.new(data)
+  class Encrypt
+    def initialize(data)
+      @data = data
+      @keys = Set.new
     end
 
-    # Contians the details used to encrypt specified stream, is what actually does
-    # any encryption.
-    # 
-    class GpgEncryption
-
-      def initialize(data)
-        @data = data
-        @keys = Set.new
-      end
-
-      # Expects an array of e-mail addresses for people who this file file should be  
-      # decryptable by. 
-      #
-      def for(recipients)
-        recipients.each do |email|
-          unless key = Key.find(email)
-            raise InvalidEmailError, "Public keys not found: #{email}"
-          end
-
-          @keys << key
+    # Expects an array of e-mail addresses for people who this file file should be
+    # decryptable by.
+    #
+    def for(*recipients)
+      recipients.flatten.each do |email|
+        unless key = Key.find(email)
+          raise InvalidEmailError, "Public key not found: #{email}"
         end
 
-        self
+        @keys << key
       end
-      
-      # Encrypts the current file for the list of recipients specific (if they are valid)
-      #   
-      def encrypt
-        recipients = @keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}
 
-        Gpgr.run recipients.push("--yes --encrypt"), @data
-      end
-      
+      self
+    end
+
+    # Encrypts the current file for the list of recipients specific (if they are valid)
+    #
+    def result
+      recipients = @keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}
+
+      Gpgr.run recipients.push("--yes --encrypt"), @data
     end
   end
 
