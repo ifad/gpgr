@@ -118,10 +118,10 @@ module Gpgr
     # decryptable by.
     #
     def for(*recipients)
-      recipients.flatten.each do |email|
-        unless key = Key.find(email)
-          raise InvalidEmailError, "Public key not found: #{email}"
-        end
+      recipients.flatten.each do |rcpt|
+        mail = rcpt.respond_to?(:mail) ? rcpt.mail : rcpt
+        key  = Key.find(mail)
+        raise InvalidEmailError, "Public key not found: #{mail}" unless key
 
         @keys << key
       end
