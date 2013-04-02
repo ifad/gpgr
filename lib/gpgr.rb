@@ -47,7 +47,7 @@ module Gpgr
   end
 
   def self.version
-    @version ||= `#{command} --version`.split("\n").grep(/GnuPG/).first.match(/(\d+\.\d+\.\d+)/) { $1 }.to_f
+    @version ||= run('--version').match(/gpg \(GnuPG\) (\d+\.\d+\.\d+)/) { $1.to_f }
   end
 
   # Poor man's IO Loop.
@@ -187,39 +187,36 @@ module Gpgr
     # Raw list of public keys
     #
     def self.installed_public_keys
-      pubkey_prefix = Gpgr.version >= 2.0 ? 'uid' : 'pub'
-
-      `#{Gpgr.command} -q --no-verbose --list-public-keys --with-colons`.
-        force_encoding('utf-8').split("\n").grep(/^#{pubkey_prefix}.+\<?.+@.+\>?/).
-        map {|row| Key.new(row)}
+      Gpgr.run('--list-public-keys --with-colons --fixed-list-mode').
+        force_encoding('utf-8').scan(/pub.+?(?=pub|\Z)/m).map {|k| Key.new(k)}
     end
   end
 
   class Key
     include Comparable
 
+    PUB_RE = /^pub:[\w-]:\d+:\d+:(?<uid>[0-9A-f]+):\d+:.*?:.*?:.*?:(?<mail>.*?):/
+    UID_RE = /^uid:[\w-]:\d*:\d*:(?<uid>[0-9A-f]*):\d+:.*?:.*?:.*?:(?<mail>.*?):/
+
     def initialize(row)
-      if row =~ /:/
-
-        key = row.split(':')
-        @mail = key[9].downcase
-        @mail = $1 if @mail =~ /.+<(.+@.+)>/
-
-        @uid = if Gpgr.version < 2.0
-          key[4]
-        else
-          `#{Gpgr.command} --list-public-keys --with-colons "#@mail"`.
-            force_encoding('utf-8').split("\n").grep(/^pub/).first.split(':')[4] rescue nil
+      [PUB_RE, UID_RE].each do |re|
+        if match = row.match(re)
+          @uid  ||= match[:uid]  if match[:uid].size > 0
+          @mail ||= match[:mail] if match[:mail].size > 0
         end
-      else
+      end
 
-        @uid, @mail = row.scan(/pub\s+ \w+\/(\w+) .+ <?(.+@[^>]+)/).first
-        @mail.chomp!
+      if @uid.nil? || @mail.nil?
+        raise InvalidKeyError, "Unable to parse #{row.inspect}"
+      end
+
+      if match = @mail.match(/(?<name>.+)\<(?<mail>.+@.+)\>/)
+        @name = match[:name].strip
+        @mail = match[:mail]
       end
     end
 
-    attr_reader :uid
-    attr_reader :mail
+    attr_reader :uid, :mail, :name
     alias :email :mail
 
     def <=>(another)
@@ -235,12 +232,7 @@ module Gpgr
     end
 
     def self.parse(stream)
-      row = if Gpgr.version < 2.0
-        Gpgr.run("--with-colons", stream)
-      else
-        Gpgr.run("--keyid-format long", stream)
-      end
-
+      row = Gpgr.run('--with-colons --fixed-list-mode', stream)
       raise InvalidKeyError, 'Invalid key' if row.size.zero?
       new(row)
     end
