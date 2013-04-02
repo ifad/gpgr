@@ -132,7 +132,7 @@ module Gpgr
     # Encrypts the current file for the list of recipients specific (if they are valid)
     #
     def result
-      recipients = @keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}
+      recipients = @keys.map {|key| "--recipient #{key.mail}"}
 
       Gpgr.run recipients.push("--yes --encrypt"), @data
     end
@@ -202,6 +202,9 @@ module Gpgr
 
           key = find(key.mail)
           raise InvalidKeyError, 'Unable to import key' unless key # TODO better error handling
+
+          # Mark the key as trusted
+          Gpgr.run "--trusted-key #{key.uid} --recipient #{key.mail} --encrypt"
         end
 
         return key
