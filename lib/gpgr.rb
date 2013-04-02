@@ -122,73 +122,33 @@ module Gpgr
     class GpgEncryption
 
       def initialize(data)
-        @clear_text = data
+        @data = data
+        @keys = Set.new
       end
-      
+
       # Expects an array of e-mail addresses for people who this file file should be  
       # decryptable by. 
       #
-      def for(email_addresses)
-        @email_addresses = Set.new([email_addresses].flatten.map(&:downcase))
+      def for(recipients)
+        recipients.each do |email|
+          unless key = Key.find(email)
+            raise InvalidEmailError, "Public keys not found: #{email}"
+          end
+
+          @keys << key
+        end
+
         self
       end
       
       # Encrypts the current file for the list of recipients specific (if they are valid)
       #   
       def encrypt
-        keys = Gpgr::Keys.installed_public_keys.select {|key| @email_addresses.include?(key.mail)}
+        recipients = @keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}
 
-        unless keys.size == @email_addresses.size
-          raise InvalidEmailError.new("One or more of the e-mail addresses you supplied don't have valid keys assigned!")
-        end
-
-        encrypt = keys.map {|key| "--trusted-key #{key.uid} --recipient #{key.mail}"}.push("--yes --encrypt")
-
-        Gpgr.run encrypt, @clear_text
+        Gpgr.run recipients.push("--yes --encrypt"), @data
       end
       
-    end
-  end
-
-  # Encapsulates all the functionality for dealing with GPG Keys. There isn't much here since
-  # key managment isn't really one of the goals of this project. It will, however, allow you
-  # to import new keys and provides a means to list existing installed keys.
-  # 
-  module Keys
-
-    # Imports the key at the specified path into the keyring. Since this is
-    # really running gpg --import ./path/to/key.asc, the key will be imported
-    # and added to the keyring for the user executing this command.
-    #
-    # FIXME: RACE CONDITION HERE
-    #
-    def self.import(key_material)
-      installed = self.installed_public_keys
-      new_key = Key.parse(key_material)
-
-      if existing = installed.find {|k| k.mail == new_key.mail}
-        existing
-      else
-        Gpgr.run '--import --quiet --yes --no-verbose', key_material
-
-        # Return the new key
-        (self.installed_public_keys - installed).first
-      end
-    end
-
-    # Simply checks to see if the e-mail address passed through as an argument has a
-    # public key attached to it by checking in installed_public_keys.
-    #
-    def self.public_key_installed?(email)
-      email = email.downcase
-      !!installed_public_keys.find {|k| k.email == email}
-    end
-
-    # Raw list of public keys
-    #
-    def self.installed_public_keys
-      Gpgr.run('--list-public-keys --with-colons --fixed-list-mode').
-        force_encoding('utf-8').scan(/pub.+?(?=pub|\Z)/m).map {|k| Key.new(k)}
     end
   end
 
@@ -231,10 +191,45 @@ module Gpgr
       uid.eql?(other.uid)
     end
 
-    def self.parse(stream)
-      row = Gpgr.run('--with-colons --fixed-list-mode', stream)
-      raise InvalidKeyError, 'Invalid key' if row.size.zero?
-      new(row)
+    class << self
+      def parse(stream)
+        row = Gpgr.run('--with-colons --fixed-list-mode', stream)
+        raise InvalidKeyError, 'Invalid key' if row.size.zero?
+        new(row)
+      end
+
+      def find(recipient)
+        all(recipient).first
+      end
+
+      def all(*recipients)
+        public_keys(recipients.flatten)
+      end
+
+      def import(key_material)
+        key = parse(key_material)
+
+        # Already installed
+        unless find(key.mail)
+          # Import
+          Gpgr.run '--import --quiet --yes --no-verbose', key_material
+
+          key = find(key.mail)
+          raise InvalidKeyError, 'Unable to import key' unless key # TODO better error handling
+        end
+
+        return key
+      end
+
+      private
+        def public_keys(*args)
+          output = Gpgr.run(['--list-public-keys --with-colons --fixed-list-mode'].concat(args)).
+            force_encoding('utf-8')
+
+          # Group pub:: and uid:: stanzas
+          return output.scan(/pub.+?(?=pub|\Z)/m).map {|k| Key.new(k)}
+        end
+
     end
   end
 
